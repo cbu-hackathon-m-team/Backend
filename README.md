@@ -17,8 +17,8 @@ Copy-Item .env.example .env  # .env가 없을 때 한 번만. 기존 설정을 �
 ```
 
 `.env`에서 `OSSGUARD_API_TOKEN`을 임의의 긴 팀 토큰으로 바꾸고,
-`OSSGUARD_ALLOWED_REPOS=["https://github.com/조직/시연저장소"]`를 설정한다.
-초깃값 `[]`에서는 프로젝트 실행 대상 등록이 차단된다. 환경변수 목록은 JSON 배열이다.
+`OSSGUARD_ALLOWED_REPOS`에는 기본 공개 시연 저장소 `https://github.com/cbu-hackathon-m-team/OSSGuard-Purchase-Demo`가 들어 있다.
+다른 저장소를 검토해 추가할 수 있다. `[]`에서는 프로젝트 실행 대상 등록이 차단된다. 환경변수 목록은 JSON 배열이다.
 
 ```powershell
 docker compose up -d db
@@ -44,7 +44,8 @@ DB 데이터는 `ossguard_pgdata` 볼륨에 남는다. 종료는 `docker compose
 
 ## 검증할 프로그램 준비
 
-`examples/purchase-app/`의 **내용을 별도 공개 GitHub 저장소 루트에** 올리면 지원 규격에 맞는 시연 대상이 된다.
+공개 [주문·출고 샘플](https://github.com/cbu-hackathon-m-team/OSSGuard-Purchase-Demo)의 `main`을 바로 사용할 수 있다. `pydantic` 목표 버전은 `2.12.5`, 동일 버전 대조군은 `1.10.24`다.
+`examples/purchase-app/`의 내용을 다른 공개 GitHub 저장소 루트에 올려도 지원 규격에 맞는 시연 대상이 된다.
 이 백엔드 저장소 자체를 대상 URL로 입력하면 루트 실행 규격이 없어 검사되지 않는다.
 공개 저장소 생성·업로드는 자동으로 수행하지 않는다.
 
