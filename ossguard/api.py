@@ -8,7 +8,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from sqlalchemy import select, text
+from sqlalchemy import delete, select, text
 from sqlalchemy.exc import IntegrityError
 
 from ossguard.ai import generate_suite
@@ -138,7 +138,7 @@ def create_app(settings: Settings | None = None):
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origins,
-        allow_methods=["GET", "POST", "PUT"],
+        allow_methods=["GET", "POST", "PUT", "DELETE"],
         allow_headers=["Authorization", "Content-Type"],
     )
     security = HTTPBearer(auto_error=False)
@@ -227,6 +227,43 @@ def create_app(settings: Settings | None = None):
                     for suite in suites
                 ]
             }
+
+    @app.delete("/api/projects/{project_id}", dependencies=auth)
+    async def delete_project(project_id: str):
+        async with sessions.begin() as session:
+            await get_project(session, project_id, lock=True)
+            jobs = list(
+                await session.scalars(
+                    select(Validation).where(Validation.project_id == project_id).with_for_update()
+                )
+            )
+            if any(
+                job.execution_status in {"QUEUED", "RUNNING"}
+                or job.cleanup_status != "SUCCEEDED"
+                or job.analysis_status in {"PENDING", "RUNNING"}
+                for job in jobs
+            ):
+                raise GuardError(
+                    "PROJECT_BUSY", "Wait for execution and follow-up processing to finish", 409
+                )
+            run_ids = [job.id for job in jobs]
+            notifications = list(
+                await session.scalars(
+                    select(EmailNotification)
+                    .where(EmailNotification.validation_id.in_(run_ids))
+                    .with_for_update()
+                )
+            )
+            if any(row.status in {"PENDING", "SENDING"} for row in notifications):
+                raise GuardError("PROJECT_BUSY", "Wait for result notifications to finish", 409)
+            await session.execute(
+                delete(EmailNotification).where(EmailNotification.validation_id.in_(run_ids))
+            )
+            await session.execute(delete(TestResult).where(TestResult.validation_id.in_(run_ids)))
+            await session.execute(delete(Validation).where(Validation.project_id == project_id))
+            await session.execute(delete(TestSuite).where(TestSuite.project_id == project_id))
+            await session.execute(delete(Project).where(Project.id == project_id))
+        return {"id": project_id}
 
     @app.post("/api/projects/{project_id}/inspect", dependencies=auth)
     async def inspect_project(project_id: str):

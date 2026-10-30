@@ -11,7 +11,7 @@ from sqlalchemy import select
 
 from ossguard.api import create_app
 from ossguard.config import Settings
-from ossguard.db import EmailNotification, Project, Validation, now
+from ossguard.db import EmailNotification, Project, TestResult, TestSuite, Validation, now
 from ossguard.docker_runner import DockerRunner
 from ossguard.repository import RepositoryService, parse_project
 from ossguard.result_worker import ResultWorker
@@ -87,6 +87,129 @@ async def setup_api(postgres_url, monkeypatch, tmp_path):
     response = await client.put(f"/api/test-suites/{suite_id}", json=suite)
     assert response.status_code == 200, response.text
     return settings, app, client, project_id, suite_id
+
+
+async def test_delete_project_removes_its_records_only(db, postgres_url, monkeypatch, tmp_path):
+    _, app, client, project_id, suite_id = await setup_api(postgres_url, monkeypatch, tmp_path)
+    try:
+        other = (
+            await client.post("/api/projects", json={"name": "Keep", "repository_url": REPO})
+        ).json()["id"]
+        response = await client.post(
+            "/api/validations",
+            json={
+                "project_id": project_id,
+                "package": "pydantic",
+                "target_version": "2.12.5",
+                "suite_id": suite_id,
+                "idempotency_key": "delete-project-test",
+            },
+        )
+        run_id = response.json()["id"]
+        async with app.state.sessions.begin() as session:
+            job = await session.get(Validation, run_id)
+            job.execution_status = "COMPLETED"
+            job.cleanup_status = "SUCCEEDED"
+            job.analysis_status = "SKIPPED"
+            session.add(
+                TestResult(validation_id=run_id, case_id="T01", environment="baseline", result={})
+            )
+            session.add(
+                EmailNotification(
+                    validation_id=run_id,
+                    event_key="delete-test",
+                    recipient="test@example.com",
+                    status="ACCEPTED",
+                )
+            )
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app), base_url="http://test"
+        ) as anonymous:
+            assert (await anonymous.delete(f"/api/projects/{project_id}")).status_code == 401
+        preflight = await client.options(
+            f"/api/projects/{project_id}",
+            headers={
+                "Origin": "http://localhost:3000",
+                "Access-Control-Request-Method": "DELETE",
+                "Access-Control-Request-Headers": "authorization",
+            },
+        )
+        assert preflight.status_code == 200
+        deleted = await client.delete(f"/api/projects/{project_id}")
+        assert deleted.status_code == 200, deleted.text
+        assert (await client.get(f"/api/projects/{project_id}")).status_code == 404
+        assert (await client.get(f"/api/projects/{other}")).status_code == 200
+        assert (await client.delete(f"/api/projects/{project_id}")).status_code == 404
+        async with app.state.sessions() as session:
+            assert await session.get(TestSuite, suite_id) is None
+            assert await session.get(Validation, run_id) is None
+            assert not list(
+                await session.scalars(select(TestResult).where(TestResult.validation_id == run_id))
+            )
+            assert not list(
+                await session.scalars(
+                    select(EmailNotification).where(EmailNotification.validation_id == run_id)
+                )
+            )
+    finally:
+        await client.aclose()
+        await app.state.engine.dispose()
+
+
+@pytest.mark.parametrize(
+    "execution,cleanup,analysis,email",
+    [
+        ("QUEUED", "PENDING", "PENDING", None),
+        ("RUNNING", "PENDING", "PENDING", None),
+        ("COMPLETED", "FAILED", "SKIPPED", None),
+        ("COMPLETED", "SUCCEEDED", "PENDING", None),
+        ("COMPLETED", "SUCCEEDED", "RUNNING", None),
+        ("COMPLETED", "SUCCEEDED", "SKIPPED", "PENDING"),
+        ("COMPLETED", "SUCCEEDED", "SKIPPED", "SENDING"),
+    ],
+)
+async def test_delete_project_blocks_active_work(
+    db, postgres_url, monkeypatch, tmp_path, execution, cleanup, analysis, email
+):
+    _, app, client, project_id, suite_id = await setup_api(postgres_url, monkeypatch, tmp_path)
+    try:
+        response = await client.post(
+            "/api/validations",
+            json={
+                "project_id": project_id,
+                "package": "pydantic",
+                "target_version": "2.12.5",
+                "suite_id": suite_id,
+                "idempotency_key": "delete-busy-test",
+            },
+        )
+        run_id = response.json()["id"]
+        async with app.state.sessions.begin() as session:
+            job = await session.get(Validation, run_id)
+            job.execution_status, job.cleanup_status, job.analysis_status = (
+                execution,
+                cleanup,
+                analysis,
+            )
+            if email:
+                session.add(
+                    EmailNotification(
+                        validation_id=run_id,
+                        event_key="delete-busy-email",
+                        recipient="test@example.com",
+                        status=email,
+                    )
+                )
+        response = await client.delete(f"/api/projects/{project_id}")
+        assert response.status_code == 409, response.text
+        assert response.json()["error"]["code"] == "PROJECT_BUSY"
+        assert (await client.get(f"/api/projects/{project_id}")).status_code == 200
+        async with app.state.sessions() as session:
+            assert await session.get(TestSuite, suite_id) is not None
+            assert await session.get(Validation, run_id) is not None
+    finally:
+        await client.aclose()
+        await app.state.engine.dispose()
 
 
 async def test_api_snapshots_idempotency_and_auth(db, postgres_url, monkeypatch, tmp_path):
