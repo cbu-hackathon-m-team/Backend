@@ -1,0 +1,6 @@
+[
+  {"id":"T01","method":"POST","path":"/orders","body":{"order_id":"T01","paid":true,"stock":10,"quantity":2},"expected_status":200,"assertions":[{"path":"stock_after","op":"eq","value":8}],"external":[{"method":"POST","path":"/shipping","body_contains":{"order_id":"T01"},"count":1,"response_status":200}]},
+  {"id":"T02","method":"POST","path":"/orders","body":{"order_id":"T02","paid":true,"stock":2,"quantity":2},"expected_status":200,"assertions":[{"path":"stock_after","op":"eq","value":0}],"external":[{"method":"POST","path":"/shipping","body_contains":{"order_id":"T02"},"count":1,"response_status":200}]},
+  {"id":"T03","method":"POST","path":"/orders","body":{"order_id":"T03","paid":false,"stock":10,"quantity":2},"expected_status":200,"assertions":[{"path":"stock_after","op":"eq","value":10}],"external":[{"method":"POST","path":"/shipping","body_contains":{"order_id":"T03"},"count":0,"response_status":200}]},
+  {"id":"T04","method":"POST","path":"/orders","body":{"order_id":"T04","paid":true,"stock":1,"quantity":2},"expected_status":200,"assertions":[{"path":"stock_after","op":"eq","value":1}],"external":[{"method":"POST","path":"/shipping","body_contains":{"order_id":"T04"},"count":0,"response_status":200}]}
+]

@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "ecosystem": "python-uv",
+  "dockerfile": "Dockerfile.ossguard",
+  "python": "3.12",
+  "app_port": 8000,
+  "health_path": "/health",
+  "test_cases": "ossguard/tests.json",
+  "mock_stubs": "ossguard/stubs",
+  "env_schema": {
+    "SHIPPING_BASE_URL": {"required": true, "secret": false, "source": "runner_mock"}
+  }
+}

@@ -1,0 +1,47 @@
+name: ossguard
+services:
+  db:
+    image: postgres:17.6-alpine
+    environment:
+      POSTGRES_USER: ossguard
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-ossguard}
+      POSTGRES_DB: ossguard
+    ports:
+      - "127.0.0.1:54329:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ossguard"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+  migrate:
+    build: .
+    env_file: .env
+    environment:
+      OSSGUARD_DATABASE_URL: postgresql+asyncpg://ossguard:${POSTGRES_PASSWORD:-ossguard}@db:5432/ossguard
+    command: ["alembic", "upgrade", "head"]
+    depends_on:
+      db:
+        condition: service_healthy
+  api:
+    build: .
+    env_file: .env
+    environment:
+      OSSGUARD_DATABASE_URL: postgresql+asyncpg://ossguard:${POSTGRES_PASSWORD:-ossguard}@db:5432/ossguard
+    ports:
+      - "127.0.0.1:8000:8000"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+  result-worker:
+    build: .
+    env_file: .env
+    environment:
+      OSSGUARD_DATABASE_URL: postgresql+asyncpg://ossguard:${POSTGRES_PASSWORD:-ossguard}@db:5432/ossguard
+    command: ["python", "-m", "ossguard.result_worker"]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+volumes:
+  pgdata:
