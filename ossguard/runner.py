@@ -1,7 +1,9 @@
 import asyncio
 import contextlib
 import logging
+import os
 import shutil
+import stat
 import tomllib
 
 import httpx
@@ -125,7 +127,15 @@ class ExecutionWorker:
         if target.parent != base or target == base:
             raise GuardError("INVALID_WORK_PATH", "Cleanup path is outside the run workspace")
         if target.exists():
-            shutil.rmtree(target)
+
+            def retry_readonly(function, failed_path, error):
+                if os.name != "nt" or not isinstance(error, PermissionError):
+                    raise error
+                # Git marks packed objects read-only on Windows.
+                os.chmod(failed_path, os.stat(failed_path).st_mode | stat.S_IWRITE)
+                function(failed_path)
+
+            shutil.rmtree(target, onexc=retry_readonly)
 
     async def execute(self, job: Validation):
         run_id = job.id

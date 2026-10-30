@@ -1,16 +1,40 @@
 import asyncio
 import json
+import stat
 
 import httpx
 import pytest
 from pydantic import ValidationError
 
 from ossguard.commands import command
+from ossguard.config import Settings
 from ossguard.errors import GuardError
 from ossguard.evidence import Redactor, bounded_text
+from ossguard.runner import ExecutionWorker
 from ossguard.schemas import EnvironmentUpdate, ExecutionProfile, HttpCase, ProjectCreate
 from ossguard.updater import package_diff
 from ossguard.validator import assert_case, compare_results, normalize, read_journal
+
+
+def test_cleanup_removes_readonly_git_objects(tmp_path):
+    work_dir = tmp_path / "runs"
+    run = work_dir / "run-1"
+    objects = run / ".git" / "objects" / "pack"
+    objects.mkdir(parents=True)
+    packed = objects / "pack-example.idx"
+    packed.write_text("test git object")
+    packed.chmod(stat.S_IREAD)
+    ExecutionWorker(Settings(_env_file=None, work_dir=work_dir), None).remove_work(run)
+    assert not run.exists()
+
+
+def test_cleanup_refuses_paths_outside_run_workspace(tmp_path):
+    outside = tmp_path / "keep"
+    outside.mkdir()
+    worker = ExecutionWorker(Settings(_env_file=None, work_dir=tmp_path / "runs"), None)
+    with pytest.raises(GuardError, match="outside"):
+        worker.remove_work(outside)
+    assert outside.exists()
 
 
 @pytest.mark.parametrize(
