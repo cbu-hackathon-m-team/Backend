@@ -1,0 +1,4 @@
+{
+  "nodered/node-red:4.0.9": "nodered/node-red@sha256:0b295b3a14c512548567ca99db631bc37b23bfc79fd009ee8248a610fafdb4b5",
+  "nodered/node-red:4.1.7": "nodered/node-red@sha256:cf2d5657f12faebffaf1cea10203f277a2445434dec6a997212080ec0080f6c5"
+}

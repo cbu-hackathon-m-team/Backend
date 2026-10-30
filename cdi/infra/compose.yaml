@@ -1,0 +1,15 @@
+# Local smoke fixture only. n8n versions and workflow are to be selected later.
+services:
+  fixture:
+    image: python:3.12-slim
+    command: ["python", "-m", "http.server", "8080", "--directory", "/site"]
+    ports:
+      - "127.0.0.1:${FIXTURE_PORT:-18080}:8080"
+    volumes:
+      - ../fixtures/site:/site:ro
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080', timeout=2)"]
+      interval: 2s
+      timeout: 3s
+      retries: 15
+

@@ -1,0 +1,285 @@
+[
+  {
+    "id": "orders",
+    "type": "tab",
+    "label": "OSSGuard synthetic order demo"
+  },
+  {
+    "id": "http_in",
+    "type": "http in",
+    "z": "orders",
+    "name": "http_in",
+    "x": 270,
+    "y": 135,
+    "wires": [
+      [
+        "receive_setup"
+      ]
+    ],
+    "url": "/orders",
+    "method": "post",
+    "upload": false,
+    "swaggerDoc": ""
+  },
+  {
+    "id": "receive_setup",
+    "type": "function",
+    "z": "orders",
+    "name": "receive_setup",
+    "x": 300,
+    "y": 170,
+    "wires": [
+      [
+        "order_receive"
+      ]
+    ],
+    "outputs": 1,
+    "func": "\nmsg.order = msg.payload;\nif (!Number.isInteger(msg.order.quantity) || msg.order.quantity <= 0) {\n    msg.statusCode = 422; node.error('invalid quantity', msg); return null;\n}\nmsg.correlation = {\n    'X-Run-Id': msg.req.headers['x-run-id'],\n    'X-Env-Id': msg.req.headers['x-env-id'],\n    'X-Case-Id': msg.req.headers['x-case-id']\n};\nmsg.headers = {...msg.correlation, 'X-Node-Id':'order_receive', 'Content-Type':'application/json'};\nmsg.payload = {}; return msg;\n"
+  },
+  {
+    "id": "order_receive",
+    "type": "http request",
+    "z": "orders",
+    "name": "order_receive",
+    "x": 330,
+    "y": 205,
+    "wires": [
+      [
+        "payment_setup"
+      ]
+    ],
+    "method": "POST",
+    "ret": "obj",
+    "paytoqs": "ignore",
+    "url": "http://mock:8080/received",
+    "persist": false,
+    "authType": "",
+    "senderr": false,
+    "headers": [],
+    "tls": "",
+    "proxy": "",
+    "insecureHTTPParser": false
+  },
+  {
+    "id": "payment_setup",
+    "type": "function",
+    "z": "orders",
+    "name": "payment_setup",
+    "x": 360,
+    "y": 240,
+    "wires": [
+      [
+        "payment_check"
+      ]
+    ],
+    "outputs": 1,
+    "func": "msg.headers = {...msg.correlation, 'X-Node-Id':'payment_check', 'Content-Type':'application/json'}; msg.payload = {quantity:msg.order.quantity}; return msg;"
+  },
+  {
+    "id": "payment_check",
+    "type": "http request",
+    "z": "orders",
+    "name": "payment_check",
+    "x": 390,
+    "y": 275,
+    "wires": [
+      [
+        "payment_route"
+      ]
+    ],
+    "method": "POST",
+    "ret": "obj",
+    "paytoqs": "ignore",
+    "url": "http://mock:8080/payment",
+    "persist": false,
+    "authType": "",
+    "senderr": false,
+    "headers": [],
+    "tls": "",
+    "proxy": "",
+    "insecureHTTPParser": false
+  },
+  {
+    "id": "payment_route",
+    "type": "function",
+    "z": "orders",
+    "name": "payment_route",
+    "x": 420,
+    "y": 310,
+    "wires": [
+      [
+        "inventory_setup"
+      ],
+      [
+        "finish"
+      ]
+    ],
+    "outputs": 2,
+    "func": "return msg.payload.paid ? [msg, null] : [null, msg];"
+  },
+  {
+    "id": "inventory_setup",
+    "type": "function",
+    "z": "orders",
+    "name": "inventory_setup",
+    "x": 450,
+    "y": 345,
+    "wires": [
+      [
+        "inventory_decrement"
+      ]
+    ],
+    "outputs": 1,
+    "func": "msg.headers = {...msg.correlation, 'X-Node-Id':'inventory_decrement', 'Content-Type':'application/json'}; msg.payload = {quantity:msg.order.quantity}; return msg;"
+  },
+  {
+    "id": "inventory_decrement",
+    "type": "http request",
+    "z": "orders",
+    "name": "inventory_decrement",
+    "x": 480,
+    "y": 380,
+    "wires": [
+      [
+        "inventory_route"
+      ]
+    ],
+    "method": "POST",
+    "ret": "obj",
+    "paytoqs": "ignore",
+    "url": "http://mock:8080/inventory",
+    "persist": false,
+    "authType": "",
+    "senderr": false,
+    "headers": [],
+    "tls": "",
+    "proxy": "",
+    "insecureHTTPParser": false
+  },
+  {
+    "id": "inventory_route",
+    "type": "function",
+    "z": "orders",
+    "name": "inventory_route",
+    "x": 510,
+    "y": 415,
+    "wires": [
+      [
+        "finish"
+      ],
+      [
+        "finish"
+      ]
+    ],
+    "outputs": 2,
+    "func": "return msg.payload.applied ? [msg, null] : [null, msg];"
+  },
+  {
+    "id": "shipping_setup",
+    "type": "function",
+    "z": "orders",
+    "name": "shipping_setup",
+    "x": 540,
+    "y": 450,
+    "wires": [
+      [
+        "shipping_request"
+      ]
+    ],
+    "outputs": 1,
+    "func": "msg.headers = {...msg.correlation, 'X-Node-Id':'shipping_request', 'Content-Type':'application/json'}; msg.payload = {quantity:msg.order.quantity}; return msg;"
+  },
+  {
+    "id": "shipping_request",
+    "type": "http request",
+    "z": "orders",
+    "name": "shipping_request",
+    "x": 570,
+    "y": 485,
+    "wires": [
+      [
+        "finish"
+      ]
+    ],
+    "method": "POST",
+    "ret": "obj",
+    "paytoqs": "ignore",
+    "url": "http://mock:8080/shipping",
+    "persist": false,
+    "authType": "",
+    "senderr": false,
+    "headers": [],
+    "tls": "",
+    "proxy": "",
+    "insecureHTTPParser": false
+  },
+  {
+    "id": "finish",
+    "type": "function",
+    "z": "orders",
+    "name": "finish",
+    "x": 600,
+    "y": 520,
+    "wires": [
+      [
+        "http_out"
+      ]
+    ],
+    "outputs": 1,
+    "func": "msg.headers = {'Content-Type':'application/json'}; msg.statusCode=200; msg.payload={accepted:true, stock:msg.payload.stock}; return msg;"
+  },
+  {
+    "id": "http_out",
+    "type": "http response",
+    "z": "orders",
+    "name": "http_out",
+    "x": 630,
+    "y": 555,
+    "wires": [],
+    "statusCode": "",
+    "headers": {}
+  },
+  {
+    "id": "health_in",
+    "type": "http in",
+    "z": "orders",
+    "name": "health_in",
+    "x": 660,
+    "y": 590,
+    "wires": [
+      [
+        "health_body"
+      ]
+    ],
+    "url": "/health",
+    "method": "get",
+    "upload": false,
+    "swaggerDoc": ""
+  },
+  {
+    "id": "health_body",
+    "type": "function",
+    "z": "orders",
+    "name": "health_body",
+    "x": 690,
+    "y": 625,
+    "wires": [
+      [
+        "health_out"
+      ]
+    ],
+    "outputs": 1,
+    "func": "msg.payload={ready:true}; return msg;"
+  },
+  {
+    "id": "health_out",
+    "type": "http response",
+    "z": "orders",
+    "name": "health_out",
+    "x": 720,
+    "y": 660,
+    "wires": [],
+    "statusCode": "200",
+    "headers": {}
+  }
+]

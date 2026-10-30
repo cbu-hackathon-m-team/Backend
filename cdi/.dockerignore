@@ -1,0 +1,10 @@
+.venv
+.local
+.git
+tmp
+artifacts
+__pycache__
+.env
+.env.*
+tests
+docs
