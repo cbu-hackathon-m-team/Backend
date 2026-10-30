@@ -286,6 +286,10 @@ from datetime import datetime
 from typing import Any, Dict
 
 from fastapi import FastAPI, HTTPException, Query, status
+from pydantic import ValidationError
+from runner.judge import JUDGE_VERSION
+
+from app.runner_bridge import judge_results, overall_verdict, to_runner_case
 from app.schemas import (
     ProjectCreate,
     RuleUpdate,
@@ -295,7 +299,7 @@ from app.schemas import (
     ValidationState,
     VerdictType,
 )
-from app.service import AIHelperService, CommonComparatorEngine, ContractExecutionAdapter
+from app.service import AIHelperService, ContractExecutionAdapter
 
 # 해커톤 시연용 고속 메모리 저장소
 PROJECTS_DB: Dict[str, Dict[str, Any]] = {}
@@ -426,6 +430,16 @@ async def start_validation(
             detail="확정(confirmed=true)되지 않은 테스트 세트는 검증을 실행할 수 없습니다.",
         )
 
+    # 판정 기준을 실행 전에 검증한다 (허용되지 않는 비교식이면 실행하지 않음)
+    try:
+        parsed_cases = [TestCaseItem(**c) for c in suite["cases"]]
+        runner_cases = [to_runner_case(c) for c in parsed_cases]
+    except ValidationError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"테스트 세트의 기대 조건 형식이 올바르지 않습니다: {e}",
+        )
+
     ACTIVE_VALIDATION_LOCK["is_running"] = True
     run_id = f"val_{uuid.uuid4().hex[:8]}"
 
@@ -449,7 +463,7 @@ async def start_validation(
         "snapshot_hash": snapshot_hash,
         "snapshot": snapshot,
         "adapter_version": "node-red-adapter-0.1.0",
-        "comparator_version": "comparator-0.1.0",
+        "comparator_version": f"runner-judge-{JUDGE_VERSION}",
         "overall_verdict": VerdictType.UNVERIFIED,
         "case_results": [],
         "ai_analysis": None,
@@ -463,18 +477,15 @@ async def start_validation(
         adapter.start(snapshot)
 
         validation_record["state"] = ValidationState.RUNNING_BASE
-        parsed_cases = [TestCaseItem(**c) for c in suite["cases"]]
 
         case_comparisons = []
-        for case_item in parsed_cases:
+        for case_item, runner_case in zip(parsed_cases, runner_cases):
             base_res = adapter.execute_and_collect(run_id, "base", project["base_artifact_id"], case_item)
             validation_record["state"] = ValidationState.RUNNING_CANDIDATE
             cand_res = adapter.execute_and_collect(run_id, "candidate", project["candidate_artifact_id"], case_item)
 
             validation_record["state"] = ValidationState.COMPARING
-            verdict, violations, diffs = CommonComparatorEngine.compare_case(
-                base_res, cand_res, case_item.expectations
-            )
+            verdict, violations, diffs, judgement = judge_results(runner_case, base_res, cand_res)
 
             case_comparisons.append({
                 "case_id": case_item.case_id,
@@ -483,23 +494,14 @@ async def start_validation(
                 "verdict": verdict,
                 "violated_rules": violations,
                 "diffs": diffs,
+                "judgement": judgement,
                 "base_evidence": base_res.model_dump(),
                 "candidate_evidence": cand_res.model_dump(),
             })
 
         validation_record["case_results"] = case_comparisons
 
-        verdicts = [c["verdict"] for c in case_comparisons]
-        if VerdictType.EXECUTION_ERROR in verdicts:
-            validation_record["overall_verdict"] = VerdictType.EXECUTION_ERROR
-        elif VerdictType.BASE_CHECK_REQUIRED in verdicts:
-            validation_record["overall_verdict"] = VerdictType.BASE_CHECK_REQUIRED
-        elif VerdictType.REGRESSION_SUSPECTED in verdicts:
-            validation_record["overall_verdict"] = VerdictType.REGRESSION_SUSPECTED
-        elif all(v == VerdictType.PASS for v in verdicts):
-            validation_record["overall_verdict"] = VerdictType.PASS
-        else:
-            validation_record["overall_verdict"] = VerdictType.UNVERIFIED
+        validation_record["overall_verdict"] = overall_verdict([c["verdict"] for c in case_comparisons])
 
         validation_record["state"] = ValidationState.ANALYZING
         ai_res = AIHelperService.analyze_failure(

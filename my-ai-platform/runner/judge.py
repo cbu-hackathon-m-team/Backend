@@ -167,8 +167,8 @@ def judge_case(
     cand: Observation | None,
     ignore_keys: Iterable[str] = (),
 ) -> CaseVerdict:
-    base_v = judge_env(case, base, "base")
-    cand_v = judge_env(case, cand, "cand")
+    base_v = judge_env(case, base, base.env_id if base else "base")
+    cand_v = judge_env(case, cand, cand.env_id if cand else "cand")
     diffs = (
         diff_observations(base, cand, ignore_keys)
         if base is not None and cand is not None and base.delivered and cand.delivered
