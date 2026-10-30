@@ -1,0 +1,168 @@
+{
+  "target_type": "node-red",
+  "confirmed": true,
+  "suite_revision": "demo-v1",
+  "rules": "Paid orders with sufficient stock decrement inventory and request shipping once; otherwise neither. Synthetic team-confirmed fixture.",
+  "baseline": {
+    "image": "nodered/node-red:4.0.9",
+    "artifact": "normal"
+  },
+  "candidate": {
+    "image": "nodered/node-red:4.1.7",
+    "artifact": "missing_shipping"
+  },
+  "cases": [
+    {
+      "id": "T01",
+      "input": {
+        "paid": true,
+        "stock": 10,
+        "quantity": 2
+      },
+      "expectations": [
+        {
+          "op": "eq",
+          "path": "status_code",
+          "expected": 200
+        },
+        {
+          "op": "eq",
+          "path": "mock.stock",
+          "expected": 8
+        },
+        {
+          "op": "event_count",
+          "step_key": "shipping",
+          "event_type": "shipping_requested",
+          "expected": 1
+        },
+        {
+          "op": "event_count",
+          "step_key": "inventory",
+          "event_type": "inventory_decremented",
+          "expected": 1
+        },
+        {
+          "op": "event_order",
+          "expected": [
+            "received",
+            "payment",
+            "inventory",
+            "shipping"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "T02",
+      "input": {
+        "paid": true,
+        "stock": 2,
+        "quantity": 2
+      },
+      "expectations": [
+        {
+          "op": "eq",
+          "path": "status_code",
+          "expected": 200
+        },
+        {
+          "op": "eq",
+          "path": "mock.stock",
+          "expected": 0
+        },
+        {
+          "op": "event_count",
+          "step_key": "shipping",
+          "event_type": "shipping_requested",
+          "expected": 1
+        },
+        {
+          "op": "event_count",
+          "step_key": "inventory",
+          "event_type": "inventory_decremented",
+          "expected": 1
+        },
+        {
+          "op": "event_order",
+          "expected": [
+            "received",
+            "payment",
+            "inventory",
+            "shipping"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "T03",
+      "input": {
+        "paid": false,
+        "stock": 10,
+        "quantity": 2
+      },
+      "expectations": [
+        {
+          "op": "eq",
+          "path": "status_code",
+          "expected": 200
+        },
+        {
+          "op": "eq",
+          "path": "mock.stock",
+          "expected": 10
+        },
+        {
+          "op": "event_count",
+          "step_key": "shipping",
+          "event_type": "shipping_requested",
+          "expected": 0
+        },
+        {
+          "op": "event_count",
+          "step_key": "inventory",
+          "event_type": "inventory_decremented",
+          "expected": 0
+        }
+      ]
+    },
+    {
+      "id": "T04",
+      "input": {
+        "paid": true,
+        "stock": 1,
+        "quantity": 2
+      },
+      "expectations": [
+        {
+          "op": "eq",
+          "path": "status_code",
+          "expected": 200
+        },
+        {
+          "op": "eq",
+          "path": "mock.stock",
+          "expected": 1
+        },
+        {
+          "op": "event_count",
+          "step_key": "shipping",
+          "event_type": "shipping_requested",
+          "expected": 0
+        },
+        {
+          "op": "event_count",
+          "step_key": "inventory",
+          "event_type": "inventory_decremented",
+          "expected": 0
+        }
+      ]
+    }
+  ],
+  "step_map": {
+    "order_receive": "received",
+    "payment_check": "payment",
+    "inventory_decrement": "inventory",
+    "shipping_request": "shipping"
+  }
+}
