@@ -169,6 +169,8 @@ async def execute_case(
 
 
 def compare_results(baseline: list[dict], candidate: list[dict]):
+    if any(result.get("request_error") for result in [*baseline, *candidate]):
+        return "NOT_EVALUATED"
     if not baseline or not all(result["passed"] for result in baseline):
         return "BASELINE_INVALID"
     if len(candidate) != len(baseline):

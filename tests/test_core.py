@@ -83,6 +83,17 @@ def test_mock_unmatched_404_does_not_count_as_success():
     assert not all(c["passed"] for c in checks)
 
 
+@pytest.mark.parametrize("environment", ["baseline", "candidate"])
+def test_request_timeout_is_not_a_business_regression(environment):
+    baseline = [{"passed": True}]
+    candidate = [{"passed": True}]
+    (baseline if environment == "baseline" else candidate)[0] = {
+        "passed": False,
+        "request_error": "ReadTimeout",
+    }
+    assert compare_results(baseline, candidate) == "NOT_EVALUATED"
+
+
 @pytest.mark.parametrize(
     "response",
     [

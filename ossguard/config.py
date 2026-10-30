@@ -12,7 +12,9 @@ class Settings(BaseSettings):
     )
     api_token: SecretStr = SecretStr("")
     allowed_repos: list[str] = Field(default_factory=list)
-    cors_origins: list[str] = Field(default_factory=lambda: ["http://localhost:5173"])
+    cors_origins: list[str] = Field(
+        default_factory=lambda: ["http://localhost:3000", "http://localhost:5173"]
+    )
     github_token: SecretStr = SecretStr("")
     runner_id: str = Field(default="runner-1", pattern=r"^[a-zA-Z0-9_-]{1,64}$")
     work_dir: Path = Path(".work")
@@ -37,7 +39,7 @@ class Settings(BaseSettings):
     ai_url: str = "https://api.openai.com/v1/chat/completions"
     email_key: SecretStr = SecretStr("")
     email_from: str = ""
-    result_base_url: str = "http://localhost:5173/validations"
+    result_base_url: str = "http://localhost:3000/validations"
     secret_project_id: str = ""
 
 

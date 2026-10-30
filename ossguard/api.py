@@ -396,6 +396,7 @@ def create_app(settings: Settings | None = None):
                     "INSPECTION_REQUIRED", "Inspect and select a direct dependency first"
                 )
             allowed_repository(project.repository_url, settings)
+            revision = project.revision
         async with httpx.AsyncClient(timeout=15, trust_env=False) as client:
             await RepositoryService(settings, client).check_version(
                 body.package, body.target_version
@@ -403,6 +404,10 @@ def create_app(settings: Settings | None = None):
         try:
             async with sessions.begin() as session:
                 project = await get_project(session, body.project_id, lock=True)
+                if project.revision != revision:
+                    raise GuardError(
+                        "PROJECT_CHANGED", "Project changed during submission; retry", 409
+                    )
                 suite = await session.scalar(
                     select(TestSuite)
                     .where(TestSuite.id == body.suite_id, TestSuite.project_id == project.id)

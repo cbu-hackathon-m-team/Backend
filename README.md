@@ -35,7 +35,7 @@ uv run python -m ossguard.result_worker
 
 [Swagger](http://127.0.0.1:8000/docs)의 **Authorize**에 `.env`의 팀 토큰을 입력한다.
 `/health`와 API 설명 외 데이터 API는 Bearer 인증이 필요하다. 사용자별 계정/권한은 후속 범위다.
-프론트엔드 개발 origin 기본값은 `http://localhost:5173`이다.
+프론트엔드 개발 origin 기본값은 `http://localhost:3000`이며 `5173`도 허용한다. 결과 링크 기본값은 `http://localhost:3000/validations`다.
 
 API·DB·결과 Worker를 함께 컨테이너로 실행하려면 `docker compose up -d --build`를 쓴다.
 **Runner는 별도 호스트 터미널에서 실행**한다. API 컨테이너에 Docker 소켓을 마운트하지 않는다.

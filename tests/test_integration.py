@@ -124,6 +124,37 @@ async def test_api_snapshots_idempotency_and_auth(db, postgres_url, monkeypatch,
         await app.state.engine.dispose()
 
 
+async def test_submission_rejects_project_changed_during_version_check(
+    db, postgres_url, monkeypatch, tmp_path
+):
+    _, app, client, project_id, suite_id = await setup_api(postgres_url, monkeypatch, tmp_path)
+
+    async def change_project(*args, **kwargs):
+        response = await client.put(
+            f"/api/projects/{project_id}/rules", json={"description": "changed during submission"}
+        )
+        assert response.status_code == 200
+
+    monkeypatch.setattr(RepositoryService, "check_version", change_project)
+    try:
+        response = await client.post(
+            "/api/validations",
+            json={
+                "project_id": project_id,
+                "package": "pydantic",
+                "target_version": "2.12.5",
+                "suite_id": suite_id,
+                "idempotency_key": "concurrent-project-edit",
+            },
+        )
+        assert response.status_code == 409
+        assert response.json()["error"]["code"] == "PROJECT_CHANGED"
+        assert (await client.get(f"/api/validations?project_id={project_id}")).json() == []
+    finally:
+        await client.aclose()
+        await app.state.engine.dispose()
+
+
 @pytest.mark.parametrize(
     "target,baseline_invalid,expected",
     [

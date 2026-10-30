@@ -233,7 +233,7 @@ class ExecutionWorker:
                 await checkpoint("baseline_test")
                 results_a = await cases_for(client, "baseline", app_a, mock_a)
                 if not all(result["passed"] for result in results_a):
-                    verdict = "BASELINE_INVALID"
+                    verdict = compare_results(results_a, [])
                     return
                 await checkpoint("update")
                 changed = await updater.update(
