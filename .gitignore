@@ -1,0 +1,19 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# 환경변수·비밀값
+.env
+.env.*
+!.env.example
+
+# 에디터·OS
+.idea/
+.DS_Store
+Thumbs.db
